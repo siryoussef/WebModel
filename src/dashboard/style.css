@@ -322,6 +322,92 @@ body {
   color: #ffffff;
 }
 
+/* ── Account sub-rows ── */
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 8px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--canvas);
+}
+
+.account-row:last-of-type {
+  border-bottom: none;
+}
+
+.account-row.account-active {
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.account-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.active-pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.12);
+  padding: 1px 7px;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.instance-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 99px;
+  font-family: var(--font-mono);
+}
+
+.btn-sm {
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-family: var(--font-primary);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  min-height: 26px;
+}
+
+.btn-sm:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-sm.btn-danger {
+  color: var(--red);
+  border-color: var(--border);
+}
+
+.btn-sm.btn-danger:hover {
+  border-color: var(--red);
+  background: transparent;
+  color: var(--red);
+}
+
 .btn-danger {
   padding: 5px 14px;
   background: transparent;

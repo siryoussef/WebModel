@@ -43,6 +43,23 @@
       </div>
     </section>
 
+    <!-- Browser Instances Card -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Browser Instances</h2>
+        <button class="btn-login" onclick="createInstance()" style="font-size:12px;padding:4px 12px;">+ New Instance</button>
+      </div>
+      <div class="card-body">
+        <div class="instance-row" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">Active instance for login:</label>
+          <select id="instance-select" style="flex:1;min-width:160px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);font-size:13px;"></select>
+          <button class="btn-sm" id="rename-inst-btn">Rename</button>
+          <button class="btn-sm btn-danger" id="remove-inst-btn">Remove</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Each instance is an isolated cookie jar. Log into multiple providers inside one instance to share a session profile (e.g. "Personal" holding Claude + ChatGPT + Gemini). Cookies are saved as compact JSON — no full browser profile stored.</p>
+      </div>
+    </section>
+
     <!-- Providers Card -->
     <section class="card">
       <div class="card-header">
@@ -75,6 +92,18 @@
 
   <div class="toast" id="toast"></div>
 
+  <script>
+    // Wire rename/remove instance buttons after DOM ready
+    document.getElementById('rename-inst-btn').addEventListener('click', function() {
+      var sel = document.getElementById('instance-select');
+      var inst = (window._instances || []).find(function(i) { return i.id === sel.value; });
+      if (inst) renameInstance(inst.id, inst.label);
+    });
+    document.getElementById('remove-inst-btn').addEventListener('click', function() {
+      var sel = document.getElementById('instance-select');
+      if (sel.value) removeInstance(sel.value);
+    });
+  </script>
   <script src="/dashboard/app.js"></script>
 </body>
 </html>

@@ -4,6 +4,7 @@ import { anthropicRoutes } from './routes/anthropic-compat.js';
 import { managementRoutes, type ManagementDeps } from './routes/management.js';
 import { ProviderRegistry } from './core/registry.js';
 import { AuthStore } from './auth/store.js';
+import { InstanceStore } from './browser/instance-store.js';
 import type { BrowserStatus, LoginState } from './browser/manager.js';
 import { InvalidTokenError, errorToHttpResponse } from './core/errors.js';
 import { readFileSync } from 'node:fs';
@@ -15,8 +16,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export interface AppOptions {
   registry: ProviderRegistry;
   authStore: AuthStore;
+  instanceStore: InstanceStore;
   authToken: string | null;
-  onLogin?: (providerId: string) => Promise<{ status: string; message: string }>;
+  onLogin?: (providerId: string, instanceId: string, accountLabel?: string) => Promise<{ status: string; message: string }>;
   getBrowserStatus?: () => BrowserStatus;
   getLoginState?: () => LoginState;
 }
@@ -71,6 +73,7 @@ export function createApp(opts: AppOptions): Hono {
   const mgmtDeps: ManagementDeps = {
     registry: opts.registry,
     authStore: opts.authStore,
+    instanceStore: opts.instanceStore,
     onLogin: opts.onLogin,
     getLoginState: opts.getLoginState,
     getBrowserStatus: opts.getBrowserStatus,

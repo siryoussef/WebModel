@@ -7,6 +7,7 @@ import { loadConfig } from './config/loader.js';
 import { ProviderRegistry } from './core/registry.js';
 import { AuthStore } from './auth/store.js';
 import { BrowserManager } from './browser/manager.js';
+import { InstanceStore } from './browser/instance-store.js';
 import { ClaudeProvider } from './providers/claude/index.js';
 import { ChatGPTProvider } from './providers/chatgpt/index.js';
 import { DeepSeekProvider } from './providers/deepseek/index.js';
@@ -62,18 +63,18 @@ async function findAvailablePort(preferred: number, host: string): Promise<numbe
   throw new Error(`No available port found in range ${preferred}-${preferred + 99}`);
 }
 
-/** Check if Chrome is running (any instance) */
+/** Check if a Chromium-based browser is running (any instance) */
 function isChromeRunning(): boolean {
   try {
     const os = platform();
     if (os === 'darwin') {
-      execSync('pgrep -x "Google Chrome"', { stdio: 'ignore' });
+      execSync('pgrep -x "Google Chrome|Thorium|Brave Browser|Chromium|Microsoft Edge|Vivaldi"', { stdio: 'ignore' });
       return true;
     } else if (os === 'win32') {
       const out = execSync('tasklist /FI "IMAGENAME eq chrome.exe" /NH', { encoding: 'utf-8' });
       return out.includes('chrome.exe');
     } else {
-      execSync('pgrep -x "chrome|chromium|google-chrome"', { stdio: 'ignore' });
+      execSync('pgrep -x "chrome|chromium|google-chrome|thorium|thorium-browser|brave|brave-browser|msedge|vivaldi"', { stdio: 'ignore' });
       return true;
     }
   } catch {
@@ -236,11 +237,18 @@ program
       console.log(chalk.green('  ✓') + ' Browser mode: launch (independent Chrome)');
     }
 
+    const instanceStore = new InstanceStore(stateDir);
+    // Ensure there's always at least one default instance
+    if (instanceStore.getInstances().length === 0) {
+      instanceStore.createInstance('Default');
+    }
+
     const browserManager = new BrowserManager({
       profileDir: config.browser.profileDir,
       startupTimeout: config.browser.startupTimeout,
       idleShutdown: config.browser.idleShutdown,
       loginTimeout: config.browser.loginTimeout,
+      instanceStore,
       cdpUrl,
       mode: browserMode,
     });
@@ -249,10 +257,11 @@ program
     const registry = new ProviderRegistry();
     const authStore = new AuthStore(stateDir);
 
-    const browserFetch = (url: string, init: RequestInit) =>
-      browserManager.fetchInBrowser(url, init);
-    const getPage = (origin: string) =>
-      browserManager.getPageForOrigin(origin);
+    // Instance-aware fetch/getPage — picks the right cookie jar per request
+    const browserFetch = (url: string, init: RequestInit, instanceId?: string) =>
+      browserManager.fetchInBrowser(url, init, instanceId);
+    const getPage = (origin: string, instanceId?: string) =>
+      browserManager.getPageForOrigin(origin, instanceId);
 
     // Providers that need getPage for multi-step browser-context API calls
     const NEEDS_GET_PAGE = new Set([
@@ -271,40 +280,50 @@ program
       }
     }
 
-    // ── Step 4b: Auto-detect authenticated providers via cookies ──
-    if (browserMode === 'attach' && await checkCDP(cdpUrl)) {
-      try {
-        const detected = await browserManager.autoDetectAuth();
-        let autoAuthCount = 0;
-        for (const [providerId, hasCookies] of Object.entries(detected)) {
-          if (hasCookies && enabled.has(providerId)) {
-            authStore.setStatus(providerId, 'active');
-            autoAuthCount++;
-          }
+    // ── Step 4b: Auto-detect authenticated providers from saved cookies ──
+    const savedAuth = browserManager.detectAuthFromSavedCookies();
+    let autoAuthCount = 0;
+    for (const [instanceId, providerIds] of Object.entries(savedAuth)) {
+      const inst = instanceStore.getInstance(instanceId);
+      if (!inst) continue;
+      for (const providerId of providerIds) {
+        if (!enabled.has(providerId)) continue;
+        const existing = authStore.getAccounts(providerId)
+          .find(a => a.instanceId === instanceId);
+        if (!existing) {
+          authStore.addAccount(providerId, inst.label, instanceId);
+        } else {
+          authStore.setAccountStatus(providerId, existing.id, 'active');
         }
-        if (autoAuthCount > 0) {
-          console.log(chalk.green('  ✓') + ` Auto-detected ${autoAuthCount} authenticated providers from browser cookies`);
-        }
-      } catch {
-        // Auto-detect failed, not critical
+        autoAuthCount++;
       }
+    }
+    if (autoAuthCount > 0) {
+      console.log(chalk.green('  ✓') + ` Restored ${autoAuthCount} authenticated provider sessions from saved cookies`);
     }
 
     // ── Step 5: Create and start server ──
     const app = createApp({
       registry,
       authStore,
+      instanceStore,
       authToken: config.server.authToken,
       getBrowserStatus: () => browserManager.getStatus(),
-      onLogin: async (providerId: string) => {
+      onLogin: async (providerId: string, instanceId: string, accountLabel?: string) => {
         const provider = registry.getProvider(providerId);
         if (!provider) return { status: 'error', message: `Provider "${providerId}" not found.` };
 
-        await browserManager.startLogin(providerId, provider.info.loginUrl, (success) => {
+        const inst = instanceStore.getInstance(instanceId);
+        const instLabel = inst?.label ?? 'Default';
+        const label = accountLabel?.trim() || instLabel;
+        const account = authStore.addAccount(providerId, label, instanceId);
+
+        await browserManager.startLogin(providerId, instanceId, provider.info.loginUrl, (success) => {
           if (success) {
-            authStore.setStatus(providerId, 'active');
-            console.log(chalk.green(`  ✓ ${providerId} login completed. Cookies saved.`));
+            authStore.setAccountStatus(providerId, account.id, 'active');
+            console.log(chalk.green(`  ✓ ${providerId} [${label} @ ${instLabel}] login completed.`));
           } else {
+            authStore.removeAccount(providerId, account.id);
             console.log(chalk.yellow(`  ⚠ ${providerId} login did not complete.`));
           }
         });
