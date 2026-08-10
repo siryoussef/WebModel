@@ -135,33 +135,9 @@ export function findChromePath(): string | undefined {
   }
 
   if (os === 'linux') {
-    const paths = [
-      // Google Chrome
-      '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable',
-      // Thorium
-      '/usr/bin/thorium-browser',
-      '/usr/bin/thorium',
-      // Chromium
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/snap/bin/chromium',
-      // Brave
-      '/usr/bin/brave-browser',
-      '/usr/bin/brave',
-      // Microsoft Edge
-      '/usr/bin/microsoft-edge',
-      '/usr/bin/microsoft-edge-stable',
-      // Vivaldi
-      '/usr/bin/vivaldi',
-      '/usr/bin/vivaldi-stable',
-      // Ungoogled Chromium
-      '/usr/bin/ungoogled-chromium',
-    ];
-    for (const p of paths) {
-      if (existsSync(p)) return p;
-    }
-    // Try which — covers NixOS and other distros with non-standard PATH-based installs
+    const user = process.env.USER || 'youssef';
+    const home = process.env.HOME || `/home/${user}`;
+
     const candidates = [
       'google-chrome', 'google-chrome-stable',
       'thorium-browser', 'thorium',
@@ -171,6 +147,21 @@ export function findChromePath(): string | undefined {
       'vivaldi', 'vivaldi-stable',
       'ungoogled-chromium',
     ];
+
+    const paths = [
+      // Standard distro bins
+      ...candidates.map(c => `/usr/bin/${c}`),
+      '/snap/bin/chromium',
+      // Nix/NixOS user & system profiles
+      ...candidates.map(c => `${home}/.nix-profile/bin/${c}`),
+      ...candidates.map(c => `/etc/profiles/per-user/${user}/bin/${c}`),
+      ...candidates.map(c => `/run/current-system/sw/bin/${c}`),
+    ];
+
+    for (const p of paths) {
+      if (existsSync(p)) return p;
+    }
+    // Try which — covers NixOS and other distros with non-standard PATH-based installs
     for (const bin of candidates) {
       try {
         const p = execSync(`which ${bin}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
