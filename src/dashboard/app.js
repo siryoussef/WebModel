@@ -28,6 +28,7 @@ async function loadInstances() {
     _instances = data.instances || [];
     window._instances = _instances; // expose for inline HTML handlers
     renderInstanceSelect();
+    renderSelectedInstanceButtons();
   } catch (e) {
     _instances = [];
   }
@@ -52,6 +53,24 @@ function getSelectedInstanceId() {
   return sel ? sel.value : (_instances[0] && _instances[0].id);
 }
 
+function getSelectedInstance() {
+  var id = getSelectedInstanceId();
+  return _instances.find(function (inst) { return inst.id === id; }) || null;
+}
+
+function renderSelectedInstanceButtons() {
+  var instance = getSelectedInstance();
+  var renameBtn = document.getElementById('rename-inst-btn');
+  var removeBtn = document.getElementById('remove-inst-btn');
+  if (!renameBtn || !removeBtn) return;
+
+  var hasInstance = !!instance;
+  renameBtn.disabled = !hasInstance;
+  removeBtn.disabled = !hasInstance;
+  renameBtn.textContent = hasInstance ? 'Rename' : 'Rename';
+  removeBtn.textContent = hasInstance ? 'Remove' : 'Remove';
+}
+
 // Instance CRUD
 async function createInstance() {
   var label = window.prompt('Name for the new browser instance (e.g. "Personal", "Work"):');
@@ -63,6 +82,7 @@ async function createInstance() {
   });
   await loadInstances();
   await loadProviders();
+  renderSelectedInstanceButtons();
 }
 
 async function renameInstance(instanceId, currentLabel) {
@@ -75,6 +95,7 @@ async function renameInstance(instanceId, currentLabel) {
   });
   await loadInstances();
   await loadProviders();
+  renderSelectedInstanceButtons();
 }
 
 async function removeInstance(instanceId) {
@@ -86,6 +107,7 @@ async function removeInstance(instanceId) {
   });
   await loadInstances();
   await loadProviders();
+  renderSelectedInstanceButtons();
   showToast('Instance removed');
 }
 
@@ -96,6 +118,7 @@ async function loadProviders() {
     var data = await res.json();
     var list = document.getElementById('provider-list');
     var countEl = document.getElementById('provider-count');
+    var selectedInstanceId = getSelectedInstanceId();
 
     if (!data.providers || data.providers.length === 0) {
       list.innerHTML = '<div class="empty">No providers configured.</div>';
@@ -109,6 +132,13 @@ async function loadProviders() {
 
     data.providers.forEach(function (p) {
       var accounts = p.accounts || [];
+      var selectedInstanceAccounts = accounts.filter(function (acc) {
+        return acc.instanceId === selectedInstanceId;
+      });
+      var selectedInstanceActive = selectedInstanceAccounts.some(function (acc) {
+        return acc.status === 'active';
+      });
+      var selectedInstanceCount = selectedInstanceAccounts.length;
 
       // Provider header row
       var row = document.createElement('div');
@@ -118,7 +148,7 @@ async function loadProviders() {
       left.className = 'provider-left';
 
       var dot = document.createElement('div');
-      dot.className = 'status-indicator ' + (p.authenticated ? 'active' : 'inactive');
+      dot.className = 'status-indicator ' + (selectedInstanceActive ? 'active' : 'inactive');
       left.appendChild(dot);
 
       var nameEl = document.createElement('span');
@@ -147,7 +177,7 @@ async function loadProviders() {
       // "Login / + Add Account" button
       var addBtn = document.createElement('button');
       addBtn.className = 'btn-login';
-      addBtn.textContent = accounts.length > 0 ? '+ Add Account' : 'Login';
+      addBtn.textContent = selectedInstanceCount > 0 ? '+ Add Account' : 'Login';
       (function (pid) {
         addBtn.addEventListener('click', function () {
           var instanceId = getSelectedInstanceId();
@@ -239,6 +269,17 @@ async function loadProviders() {
         accRow.appendChild(accRight);
         list.appendChild(accRow);
       });
+
+      // If the selected instance has no accounts for this provider, show a faint hint.
+      if (selectedInstanceCount === 0) {
+        var hintRow = document.createElement('div');
+        hintRow.className = 'account-row';
+        hintRow.style.opacity = '0.65';
+        hintRow.innerHTML = '<div class="account-left"><span class="account-label">No account in selected instance</span><span class="instance-badge">' +
+          (getSelectedInstance() ? getSelectedInstance().label : 'No instance') +
+          '</span></div><div class="account-right"></div>';
+        list.appendChild(hintRow);
+      }
     });
   } catch (err) {
     document.getElementById('provider-list').innerHTML = '<div class="error">Failed to load: ' + err.message + '</div>';
@@ -306,7 +347,9 @@ function pollLoginStatus(providerId) {
       } else if (statusData.status === 'success') {
         clearInterval(interval);
         showToast(providerId + ' login completed!');
-        loadInstances(); loadProviders(); loadHealth();
+        loadInstances();
+        loadProviders();
+        loadHealth();
         return;
       } else if (statusData.status === 'failed') {
         clearInterval(interval);
@@ -319,7 +362,9 @@ function pollLoginStatus(providerId) {
       if (provider && provider.authenticated) {
         clearInterval(interval);
         showToast(providerId + ' authenticated!');
-        loadInstances(); loadProviders(); loadHealth();
+        loadInstances();
+        loadProviders();
+        loadHealth();
       }
     } catch (e) { /* retry */ }
   }, 2000);
@@ -365,6 +410,11 @@ async function loadHealth() {
 loadInstances().then(loadProviders);
 loadHealth();
 setInterval(function () { loadInstances().then(loadProviders); loadHealth(); }, 10000);
+
+document.getElementById('instance-select')?.addEventListener('change', function () {
+  renderSelectedInstanceButtons();
+  loadProviders();
+});
 
 document.getElementById('openai-url').textContent = origin + '/v1';
 document.getElementById('anthropic-url').textContent = origin;
